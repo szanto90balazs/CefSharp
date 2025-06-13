@@ -13,6 +13,7 @@ using CefSharp.DevTools.Browser;
 using CefSharp.DevTools.Emulation;
 using CefSharp.DevTools.Network;
 using CefSharp.Example;
+using CefSharp.Internals;
 using CefSharp.OffScreen;
 using Xunit;
 using Xunit.Abstractions;
@@ -33,27 +34,56 @@ namespace CefSharp.Test.DevTools
         }
 
         [Fact]
+        public async Task CanGenerateMessageIdWithoutCollisions()
+        {
+            using var browser = new ChromiumWebBrowser("www.google.com", useLegacyRenderHandler: false);
+            await browser.WaitForInitialLoadAsync();
+
+            var iterations = 0;
+            Task.Run(() =>
+            {
+                while (iterations < 1000)
+                {
+                    CefThread.ExecuteOnUiThread(() =>
+                    {
+                        using (var devToolsClient = browser.GetDevToolsClient())
+                        {
+                            devToolsClient.Page.GetFrameTreeAsync();
+                        }
+
+                        iterations++;
+                    });
+                }
+            });
+
+            await CaptureScreenShot(browser);
+        }
+
+        [Fact]
         public async Task CanCaptureScreenshot()
         {
-            using (var browser = new ChromiumWebBrowser("www.google.com", useLegacyRenderHandler: false))
+            using var browser = new ChromiumWebBrowser("www.google.com", useLegacyRenderHandler: false);
+            await CaptureScreenShot(browser);
+        }
+
+        private async Task CaptureScreenShot(ChromiumWebBrowser browser)
+        {
+            await browser.WaitForInitialLoadAsync();
+
+            using (var devToolsClient = browser.GetDevToolsClient())
             {
-                await browser.WaitForInitialLoadAsync();
+                var response = await devToolsClient.Page.CaptureScreenshotAsync();
 
-                using (var devToolsClient = browser.GetDevToolsClient())
-                {
-                    var response = await devToolsClient.Page.CaptureScreenshotAsync();
+                Assert.NotNull(response.Data);
+                Assert.NotEmpty(response.Data);
 
-                    Assert.NotNull(response.Data);
-                    Assert.NotEmpty(response.Data);
+                var image = Image.FromStream(new MemoryStream(response.Data));
+                var size = browser.Size;
 
-                    var image = Image.FromStream(new MemoryStream(response.Data));
-                    var size = browser.Size;
-
-                    Assert.NotNull(image);
-                    Assert.Equal(ImageFormat.Png, image.RawFormat);
-                    Assert.Equal(size.Width, image.Width);
-                    Assert.Equal(size.Height, image.Height);
-                }
+                Assert.NotNull(image);
+                Assert.Equal(ImageFormat.Png, image.RawFormat);
+                Assert.Equal(size.Width, image.Width);
+                Assert.Equal(size.Height, image.Height);
             }
         }
 
@@ -152,7 +182,7 @@ namespace CefSharp.Test.DevTools
 
                     Assert.False(response.Base64Encoded);
                     Assert.StartsWith("<!doctype html>", response.Content);
-                    
+
                 }
             }
         }
@@ -342,7 +372,7 @@ namespace CefSharp.Test.DevTools
                         v => Assert.Equal(" 2 ", v),
                         v => Assert.Equal(" 2,5 ", v)
                     );
-                }                
+                }
             }
         }
 

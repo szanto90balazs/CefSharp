@@ -149,16 +149,15 @@ namespace CefSharp.DevTools
 
             var browserHost = browser.GetHost();
 
-            var messageId = browserHost.GetNextDevToolsMessageId();
-
-            if (!queuedCommandResults.TryAdd(messageId, methodResultContext))
-            {
-                throw new DevToolsClientException(string.Format("Unable to add MessageId {0} to queuedCommandResults ConcurrentDictionary.", messageId));
-            }
-
             //Currently on CEF UI Thread we can directly execute
             if (CefThread.CurrentlyOnUiThread)
             {
+                var messageId = browserHost.GetNextDevToolsMessageId();
+                if (!queuedCommandResults.TryAdd(messageId, methodResultContext))
+                {
+                    throw new DevToolsClientException(string.Format("Unable to add MessageId {0} to queuedCommandResults ConcurrentDictionary.", messageId));
+                }
+
                 ExecuteDevToolsMethod(browserHost, messageId, method, parameters, methodResultContext);
             }
             //ExecuteDevToolsMethod can only be called on the CEF UI Thread
@@ -166,12 +165,16 @@ namespace CefSharp.DevTools
             {
                 CefThread.ExecuteOnUiThread(() =>
                 {
+                    var messageId = browserHost.GetNextDevToolsMessageId();
+                    if (!queuedCommandResults.TryAdd(messageId, methodResultContext))
+                    {
+                        throw new DevToolsClientException(string.Format("Unable to add MessageId {0} to queuedCommandResults ConcurrentDictionary.", messageId));
+                    }
                     ExecuteDevToolsMethod(browserHost, messageId, method, parameters, methodResultContext);
                 });
             }
             else
             {
-                queuedCommandResults.TryRemove(messageId, out methodResultContext);
                 throw new DevToolsClientException("Unable to invoke ExecuteDevToolsMethod on CEF UI Thread.");
             }
 
